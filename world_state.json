@@ -1,6 +1,10 @@
 {
   "doors_opened": [],
-  "seeds_planted": [],
+  "seeds_planted": [
+    "garden_seed",
+    "garden_seed",
+    "garden_seed"
+  ],
   "items_collected": [
     "seed",
     "seed",
@@ -20,6 +24,6 @@
   ],
   "vines_burned": [],
   "areas_unlocked": [],
-  "life_count": 8,
-  "total_time_played": 80.06600000000073
+  "life_count": 9,
+  "total_time_played": 88.14999999999975
 }
