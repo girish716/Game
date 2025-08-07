@@ -165,6 +165,8 @@ class Item(GameObject):
                 color = PALETTE['item_torch_flame']
             elif name == "key":
                 color = PALETTE['item_key']
+            elif name == "coin":
+                color = PALETTE['item_gold']
             else:
                 color = PALETTE['ui_accent']
         super().__init__(x, y, 24, 24, color)
@@ -292,7 +294,7 @@ class Game:
                 pass  # Ignore sound errors
     
     def setup_world(self):
-        """Initialize the game world with objects"""
+        """Set up the game world based on current state with progressive difficulty"""
         # Clear existing objects
         self.npcs.clear()
         self.items.clear()
@@ -300,76 +302,235 @@ class Game:
         self.switches.clear()
         self.obstacles.clear()
         
-        # Zone 1: Garden of Beginnings
-        # Talking Tree with advanced sprite
-        tree = NPC(300, 200, "Talking Tree")
+        # Clear sprites to ensure fresh start
+        self.sprites = {
+            'npcs': {},
+            'items': {},
+            'doors': {}
+        }
+        
+        # Determine level based on actual progress, not just life count
+        # LEVEL 1: Until key is collected and door is opened
+        if "key" not in self.world_state.items_collected or "simple_door" not in self.world_state.doors_opened:
+            self.setup_level_1()
+        # LEVEL 2: After Level 1 is complete, until coin is collected
+        elif "coin" not in self.world_state.items_collected:
+            self.setup_level_2()
+        # LEVEL 3: After Level 2 is complete, until seed puzzle is solved
+        elif "seed" not in self.world_state.items_collected:
+            self.setup_level_3()
+        # LEVEL 4: Full complexity for experienced players
+        else:
+            self.setup_level_4()
+    
+    def setup_level_1(self):
+        """Level 1: Simple introduction - talk to tree, find obvious key"""
+        # Friendly tree in center
+        tree = NPC(400, 250, "Talking Tree")
+        tree.dialogue = [
+            "Hello! Welcome to the 10 Second Life world!",
+            "You only have 10 seconds per life, but don't worry!",
+            "Everything you do stays when you respawn.",
+            "See that GOLDEN KEY nearby? Go grab it!"
+        ]
         self.npcs.append(tree)
-        # Create advanced tree sprite
-        has_fruit = len(self.world_state.seeds_planted) > 0
-        self.sprites['npcs'][id(tree)] = TreeSprite(has_fruit)
         
-        # Seed item with advanced sprite
-        if "seed_garden" not in self.world_state.items_collected:
-            seed = Item(400, 300, "seed")
-            self.items.append(seed)
-            # Create advanced sprite
-            self.sprites['items'][id(seed)] = ItemSprite("seed")
-            # Add sparkle effect around seed
-            self.particle_system.add_sparkle_trail(400 + 16, 300 + 16, PALETTE['item_seed'], 3)
+        # VERY OBVIOUS key right next to the tree - can't miss it!
+        key = Item(450, 280, "key")
+        if "key" in self.world_state.items_collected:
+            key.collected = True
+        self.items.append(key)
         
-        # Door to Memory Cavern with advanced sprite
-        door1 = Door(500, 100, "cavern_door")
-        if "cavern_door" in self.world_state.doors_opened:
+        # Simple door that's clearly visible
+        door1 = Door(600, 200, "simple_door")
+        if "simple_door" in self.world_state.doors_opened:
             door1.is_open = True
         self.doors.append(door1)
-        # Create advanced door sprite
-        self.sprites['doors'][id(door1)] = DoorSprite(door1.is_open)
         
-        # Zone 2: Memory Cavern (if unlocked)
-        if "memory_cavern" in self.world_state.areas_unlocked:
-            # Torch item with advanced sprite
-            if "torch_cavern" not in self.world_state.items_collected:
-                torch = Item(600, 400, "torch")
-                self.items.append(torch)
-                # Create advanced sprite
-                self.sprites['items'][id(torch)] = ItemSprite("torch")
-                # Add fire particles around torch
-                self.particle_system.add_fire_effect(600 + 16, 400 + 16, 3)
-            
-            # Vines (obstacle that can be burned)
-            if "vines_entrance" not in self.world_state.vines_burned:
-                vine_obstacle = GameObject(700, 350, 64, 64, PALETTE.get('tree_dark', (0, 128, 0)))
-                self.obstacles.append(vine_obstacle)
-        
-        # Key for tower with advanced sprite
-        if "memory_cavern" in self.world_state.areas_unlocked and "key_tower" not in self.world_state.items_collected:
-            key = Item(750, 500, "key")
-            self.items.append(key)
-            # Create advanced sprite
-            self.sprites['items'][id(key)] = ItemSprite("key")
-            # Add golden glow around key
-            self.particle_system.add_sparkle_trail(750 + 16, 500 + 16, PALETTE['item_gold'], 2)
-        
-        # Switch puzzle
-        switch1 = Switch(200, 400, "switch1")
-        if "switch1" in self.world_state.switches_activated:
-            switch1.is_activated = True
-        self.switches.append(switch1)
-        
-        # Mirror Twin NPC (appears after certain progress)
-        if self.world_state.life_count > 5:
-            mirror_twin = NPC(800, 300, "Mirror Twin")
-            self.npcs.append(mirror_twin)
-            # Add mystical particles around Mirror Twin
-            self.particle_system.add_magic_sparkle(800 + 16, 300 + 16, 3)
-        
-        # Obstacles (walls)
+        # Add walls only around edges - keep center open
         self.obstacles.extend([
             GameObject(0, 0, SCREEN_WIDTH, 10, PALETTE['wall']),  # Top wall
             GameObject(0, SCREEN_HEIGHT-10, SCREEN_WIDTH, 10, PALETTE['wall']),  # Bottom wall
             GameObject(0, 0, 10, SCREEN_HEIGHT, PALETTE['wall']),  # Left wall
             GameObject(SCREEN_WIDTH-10, 0, 10, SCREEN_HEIGHT, PALETTE['wall']),  # Right wall
         ])
+    
+    def setup_level_2(self):
+        """Level 2: Super simple - just collect a shiny coin, no complex mechanics"""
+        # Encouraging tree dialogue
+        tree = NPC(400, 250, "Talking Tree")
+        tree.dialogue = [
+            "Excellent work! You're a natural at this!",
+            "Now let's try collecting treasures!",
+            "I see a SHINY COIN nearby - go grab it!",
+            "Coins make you sparkle with magic power!"
+        ]
+        self.npcs.append(tree)
+        
+        # VERY OBVIOUS coin placement - even more obvious than the key
+        coin = Item(500, 250, "coin")
+        if "coin" in self.world_state.items_collected:
+            coin.collected = True
+        self.items.append(coin)
+        
+        # Keep the door from level 1 (already unlocked)
+        door1 = Door(600, 200, "simple_door")
+        door1.is_open = True  # Always open now
+        self.doors.append(door1)
+        
+        # Add a second obvious door that opens when you get the coin
+        if "coin" in self.world_state.items_collected:
+            door2 = Door(200, 300, "treasure_door")
+            door2.is_open = True
+            self.doors.append(door2)
+            
+            # Add a friendly NPC behind the door
+            friendly_npc = NPC(150, 350, "Friendly Fox")
+            friendly_npc.dialogue = [
+                "Wow! You found the treasure!",
+                "You're getting really good at this game!",
+                "Keep exploring - more adventures await!"
+            ]
+            self.npcs.append(friendly_npc)
+        
+        # Simple walls
+        self.obstacles.extend([
+            GameObject(0, 0, SCREEN_WIDTH, 10, PALETTE['wall']),  # Top wall
+            GameObject(0, SCREEN_HEIGHT-10, SCREEN_WIDTH, 10, PALETTE['wall']),  # Bottom wall
+            GameObject(0, 0, 10, SCREEN_HEIGHT, PALETTE['wall']),  # Left wall
+            GameObject(SCREEN_WIDTH-10, 0, 10, SCREEN_HEIGHT, PALETTE['wall']),  # Right wall
+        ])
+    
+    def setup_level_3(self):
+        """Level 3: Simple puzzle - find a seed and give it to the tree"""
+        # Tree with simple puzzle dialogue
+        tree = NPC(400, 250, "Talking Tree")
+        tree.dialogue = [
+            "You're doing amazing! Ready for a simple puzzle?",
+            "I'm feeling hungry... could you find me a SEED?",
+            "There should be one somewhere around here.",
+            "Bring it to me and I'll show you something cool!"
+        ]
+        self.npcs.append(tree)
+        
+        # Simple seed placement - obvious but requires a bit of exploration
+        seed = Item(300, 400, "seed")
+        if "seed" in self.world_state.items_collected:
+            seed.collected = True
+        self.items.append(seed)
+        
+        # Keep previous doors open
+        door1 = Door(600, 200, "simple_door")
+        door1.is_open = True
+        self.doors.append(door1)
+        
+        door2 = Door(200, 300, "treasure_door")
+        door2.is_open = True
+        self.doors.append(door2)
+        
+        # Add reward door after giving seed to tree
+        if "seed" in self.world_state.items_collected:
+            door3 = Door(700, 400, "magic_door")
+            door3.is_open = True
+            self.doors.append(door3)
+            
+            # Add magical NPC behind the door
+            wizard = NPC(750, 450, "Wise Wizard")
+            wizard.dialogue = [
+                "Incredible! You solved the seed puzzle!",
+                "You have great potential, young adventurer!",
+                "The tree is very happy now - look how it glows!"
+            ]
+            self.npcs.append(wizard)
+        
+        # Simple walls
+        self.obstacles.extend([
+            GameObject(0, 0, SCREEN_WIDTH, 10, PALETTE['wall']),  # Top wall
+            GameObject(0, SCREEN_HEIGHT-10, SCREEN_WIDTH, 10, PALETTE['wall']),  # Bottom wall
+            GameObject(0, 0, 10, SCREEN_HEIGHT, PALETTE['wall']),  # Left wall
+            GameObject(SCREEN_WIDTH-10, 0, 10, SCREEN_HEIGHT, PALETTE['wall']),  # Right wall
+        ])
+    
+    def setup_level_4(self):
+        """Level 4: Full complexity for experienced players"""
+        # Experienced tree dialogue
+        tree = NPC(300, 200, "Talking Tree")
+        tree.dialogue = [
+            "You're becoming quite skilled at this!",
+            "Now for the final challenge - fire!",
+            "Find the TORCH and burn away the blocking vines.",
+            "This will open up new areas to explore."
+        ]
+        self.npcs.append(tree)
+        
+        # Add all items
+        items_data = [
+            ("seed", 400, 300),
+            ("torch", 150, 450),
+            ("key", 700, 100)
+        ]
+        
+        for item_name, x, y in items_data:
+            item = Item(x, y, item_name)
+            if item_name in self.world_state.items_collected:
+                item.collected = True
+            self.items.append(item)
+        
+        # Add doors for level 3
+        doors_data = [
+            ("cavern_door", 500, 100),
+            ("mirror_door", 700, 300),
+            ("final_door", 800, 400)
+        ]
+        
+        for door_id, x, y in doors_data:
+            door = Door(x, y, door_id)
+            if door_id in self.world_state.doors_opened:
+                door.is_open = True
+            self.doors.append(door)
+        
+        # Add vines that can be burned
+        if not self.world_state.vines_burned:
+            vine_obstacle = GameObject(400, 500, 200, 50, PALETTE.get('tree_dark', (0, 128, 0)))
+            self.obstacles.append(vine_obstacle)
+        
+        # Add complex walls and obstacles
+        self.obstacles.extend([
+            GameObject(0, 0, SCREEN_WIDTH, 10, PALETTE['wall']),  # Top wall
+            GameObject(0, SCREEN_HEIGHT-10, SCREEN_WIDTH, 10, PALETTE['wall']),  # Bottom wall
+            GameObject(0, 0, 10, SCREEN_HEIGHT, PALETTE['wall']),  # Left wall
+            GameObject(SCREEN_WIDTH-10, 0, 10, SCREEN_HEIGHT, PALETTE['wall']),  # Right wall
+            GameObject(250, 150, 100, 20, PALETTE['stone']),  # Stone barrier
+        ])
+        
+        # Add additional NPCs for level 3
+        if len(self.world_state.areas_unlocked) > 0:
+            mirror_twin = NPC(750, 350, "Mirror Twin")
+            mirror_twin.dialogue = [
+                "You've made it far, traveler.",
+                "The final secrets await beyond."
+            ]
+            self.npcs.append(mirror_twin)
+        
+        # Create sprites for all objects after setup
+        self.create_sprites_for_objects()
+    
+    def create_sprites_for_objects(self):
+        """Create advanced sprites for all game objects"""
+        # Create sprites for NPCs
+        for npc in self.npcs:
+            if npc.name == "Talking Tree":
+                has_fruit = len(self.world_state.seeds_planted) > 0
+                self.sprites['npcs'][id(npc)] = TreeSprite(has_fruit)
+        
+        # Create sprites for items
+        for item in self.items:
+            if not item.collected:
+                self.sprites['items'][id(item)] = ItemSprite(item.name)
+        
+        # Create sprites for doors
+        for door in self.doors:
+            self.sprites['doors'][id(door)] = DoorSprite(door.is_open)
     
     def load_world_state(self):
         """Load persistent world state from file"""
@@ -605,7 +766,7 @@ class Game:
                     if event.key == pygame.K_SPACE:
                         self.start_new_life()
                     elif event.key == pygame.K_r:
-                        # Reset world state
+                        # Reset world state completely
                         self.world_state = WorldState(
                             doors_opened=[],
                             seeds_planted=[],
@@ -617,7 +778,15 @@ class Game:
                             life_count=0,
                             total_time_played=0.0
                         )
+                        # Clear all sprites to ensure fresh start
+                        self.sprites = {
+                            'npcs': {},
+                            'items': {},
+                            'doors': {}
+                        }
                         self.save_world_state()
+                        # Reset player inventory
+                        self.player.inventory = None
                         self.start_new_life()
                 
                 elif self.state == GameState.DIALOGUE:
@@ -695,10 +864,13 @@ class Game:
                         if (i + j) % 16 == 0:
                             pygame.draw.circle(self.screen, (20, 100, 20), 
                                              (obstacle.rect.x + i, obstacle.rect.y + j), 2)
+                # Add interaction hint if player has torch and is near
+                if self.player.inventory == "torch" and self.is_near_player(obstacle, 50):
+                    self.draw_interaction_hint(obstacle.rect.centerx, obstacle.rect.y - 20, "Press E to burn vines!")
             else:
                 obstacle.draw(self.screen)
         
-        # Draw doors with advanced sprites
+        # Draw doors with advanced sprites and interaction hints
         for door in self.doors:
             if id(door) in self.sprites['doors']:
                 door_sprite = self.sprites['doors'][id(door)]
@@ -706,6 +878,15 @@ class Game:
             else:
                 # Fallback to basic drawing
                 door.draw(self.screen)
+            
+            # Add interaction feedback when near
+            if self.is_near_player(door, 50):
+                if door.is_open:
+                    self.draw_interaction_hint(door.x + door.width//2, door.y - 20, "Press E to enter")
+                elif self.player.inventory == "key":
+                    self.draw_interaction_hint(door.x + door.width//2, door.y - 20, "Press E to unlock door")
+                else:
+                    self.draw_interaction_hint(door.x + door.width//2, door.y - 20, "Need a key to unlock")
         
         # Draw switches with professional styling
         for switch in self.switches:
@@ -728,13 +909,37 @@ class Game:
                                border_radius=6)
                 self.screen.blit(glow_surf, (switch.rect.x - 4, switch.rect.y - 4))
         
-        # Draw items with advanced sprites
+        # Draw items with advanced sprites and interaction hints
         for item in self.items:
-            if not item.collected and id(item) in self.sprites['items']:
-                item_sprite = self.sprites['items'][id(item)]
-                self.screen.blit(item_sprite.get_surface(), (item.x, item.y))
+            if not item.collected:
+                # Try to draw with advanced sprite first
+                if id(item) in self.sprites['items']:
+                    item_sprite = self.sprites['items'][id(item)]
+                    self.screen.blit(item_sprite.get_surface(), (item.x, item.y))
+                else:
+                    # FALLBACK: Draw basic item if sprite doesn't exist
+                    pygame.draw.circle(self.screen, item.color, 
+                                     (item.x + item.width//2, item.y + item.height//2), 
+                                     max(item.width, item.height)//2)
+                    # Add bright border to make it more visible
+                    pygame.draw.circle(self.screen, PALETTE['item_glow'], 
+                                     (item.x + item.width//2, item.y + item.height//2), 
+                                     max(item.width, item.height)//2, 3)
+                
+                # Add glow effect and interaction hint when near
+                if self.is_near_player(item, 50):
+                    # Pulsing glow effect
+                    time_offset = pygame.time.get_ticks() * 0.005
+                    glow_alpha = int(100 + 50 * math.sin(time_offset))
+                    glow_surf = pygame.Surface((item.width + 20, item.height + 20), pygame.SRCALPHA)
+                    pygame.draw.circle(glow_surf, (*PALETTE['item_glow'][:3], glow_alpha), 
+                                     (item.width//2 + 10, item.height//2 + 10), item.width//2 + 10)
+                    self.screen.blit(glow_surf, (item.x - 10, item.y - 10))
+                    
+                    # Interaction hint
+                    self.draw_interaction_hint(item.x + item.width//2, item.y - 25, f"Press E to take {item.name}")
         
-        # Draw NPCs with advanced sprites
+        # Draw NPCs with advanced sprites and interaction feedback
         for npc in self.npcs:
             if id(npc) in self.sprites['npcs']:
                 npc_sprite = self.sprites['npcs'][id(npc)]
@@ -744,6 +949,18 @@ class Game:
                 pygame.draw.circle(self.screen, npc.color, 
                                  (npc.x + npc.width//2, npc.y + npc.height//2), 
                                  min(npc.width, npc.height)//2)
+            
+            # Add interaction glow when near
+            if self.is_near_player(npc, 60):
+                time_offset = pygame.time.get_ticks() * 0.004
+                glow_alpha = int(80 + 40 * math.sin(time_offset))
+                glow_surf = pygame.Surface((npc.width + 30, npc.height + 30), pygame.SRCALPHA)
+                pygame.draw.circle(glow_surf, (*PALETTE['ui_accent'][:3], glow_alpha), 
+                                 (npc.width//2 + 15, npc.height//2 + 15), npc.width//2 + 15)
+                self.screen.blit(glow_surf, (npc.x - 15, npc.y - 15))
+                
+                # Interaction hint
+                self.draw_interaction_hint(npc.x + npc.width//2, npc.y - 35, f"Press E to talk to {npc.name}")
             
             # Draw professional name tag
             name_text = self.font_small.render(npc.name, True, PALETTE['ui_accent'])
@@ -761,6 +978,64 @@ class Game:
         
         # Draw UI
         self.draw_ui()
+    
+    def get_current_objective(self):
+        """Get the current objective for the player based on actual progress"""
+        # Level 1: Until key is collected and door is opened
+        if "key" not in self.world_state.items_collected or "simple_door" not in self.world_state.doors_opened:
+            if self.world_state.life_count == 1:
+                return "Talk to the Talking Tree (E to interact)"
+            elif "key" in [item.name for item in self.items if not item.collected]:
+                return "Pick up the GOLDEN KEY next to the tree"
+            elif "simple_door" not in self.world_state.doors_opened:
+                return "Use the key to unlock the door (E to interact)"
+            else:
+                return "🎉 Amazing! You've mastered the basics!"
+        
+        # Level 2: After Level 1 complete, until coin is collected
+        elif "coin" not in self.world_state.items_collected:
+            if "coin" in [item.name for item in self.items if not item.collected]:
+                return "Collect the SHINY COIN near the tree"
+            else:
+                return "🌟 Fantastic! You found the treasure! Talk to the Fox!"
+        
+        # Level 3: After Level 2 complete, until seed puzzle is solved
+        elif "seed" not in self.world_state.items_collected:
+            if "seed" in [item.name for item in self.items if not item.collected]:
+                return "Find the SEED and bring it to the hungry tree"
+            else:
+                return "🧙‍♂️ Excellent! You solved the puzzle! Meet the Wizard!"
+        
+        # Level 4: Full complexity for experienced players
+        else:
+            if "torch" in [item.name for item in self.items if not item.collected]:
+                return "Find the TORCH to burn away obstacles"
+            elif not self.world_state.vines_burned:
+                return "Use the torch to burn the vines blocking your path"
+            else:
+                return "🏆 Master level! Explore all areas and NPCs"
+    
+    def is_near_player(self, obj, distance=40):
+        """Check if object is near the player"""
+        player_center = (self.player.x + 16, self.player.y + 16)
+        obj_center = (obj.rect.centerx, obj.rect.centery)
+        dx = player_center[0] - obj_center[0]
+        dy = player_center[1] - obj_center[1]
+        return (dx * dx + dy * dy) ** 0.5 < distance
+    
+    def draw_interaction_hint(self, x, y, text):
+        """Draw floating interaction hint"""
+        hint_text = self.font_small.render(text, True, PALETTE['ui_accent'])
+        hint_rect = hint_text.get_rect(center=(x, y))
+        
+        # Animated background
+        time_offset = pygame.time.get_ticks() * 0.003
+        alpha = int(150 + 50 * math.sin(time_offset))
+        
+        bg_rect = pygame.Rect(hint_rect.x - 8, hint_rect.y - 4, 
+                            hint_rect.width + 16, hint_rect.height + 8)
+        draw_advanced_ui_panel(self.screen, bg_rect, alpha=alpha, border_color=PALETTE['ui_accent'])
+        self.screen.blit(hint_text, hint_rect)
     
     def draw_ui(self):
         """Draw professional UI elements"""
@@ -799,6 +1074,13 @@ class Game:
             inv_panel_rect = pygame.Rect(20, 170, 280, 35)
             draw_advanced_ui_panel(self.screen, inv_panel_rect, f"Carrying: {self.player.inventory}", 
                                   alpha=190, border_color=PALETTE['item_glow'])
+        
+        # Clear objective panel - show current goal
+        objective = self.get_current_objective()
+        if objective:
+            obj_panel_rect = pygame.Rect(20, SCREEN_HEIGHT - 80, 500, 35)
+            draw_advanced_ui_panel(self.screen, obj_panel_rect, f"Goal: {objective}", 
+                                  alpha=200, border_color=PALETTE['text_success'])
         
         # Professional instructions panel
         instruction_panel_rect = pygame.Rect(20, SCREEN_HEIGHT - 45, 450, 30)
@@ -845,17 +1127,30 @@ class Game:
         self.screen.blit(overlay, (0, 0))
         
         # Professional death message
-        death_text = self.font_large.render("Life Complete", True, PALETTE['text_danger'])
-        death_rect = death_text.get_rect(center=(SCREEN_WIDTH//2, SCREEN_HEIGHT//2 - 80))
+        death_text = self.font_large.render("Life Complete!", True, PALETTE['text_danger'])
+        death_rect = death_text.get_rect(center=(SCREEN_WIDTH//2, SCREEN_HEIGHT//2 - 120))
         
         # Enhanced glow effect
         for i, offset in enumerate([(3, 3), (-3, -3), (3, -3), (-3, 3)]):
             alpha = 150 - i * 30
-            glow_text = self.font_large.render("Life Complete", True, (150, 0, 0))
-            glow_rect = glow_text.get_rect(center=(SCREEN_WIDTH//2 + offset[0], SCREEN_HEIGHT//2 - 80 + offset[1]))
+            glow_text = self.font_large.render("Life Complete!", True, (150, 0, 0))
+            glow_rect = glow_text.get_rect(center=(SCREEN_WIDTH//2 + offset[0], SCREEN_HEIGHT//2 - 120 + offset[1]))
             self.screen.blit(glow_text, glow_rect)
         
         self.screen.blit(death_text, death_rect)
+        
+        # Game explanation for new players
+        if self.world_state.life_count <= 3:
+            explanation_lines = [
+                "Each life lasts 10 seconds, but your actions persist!",
+                "Items you collect and puzzles you solve stay completed.",
+                "Use multiple lives to explore and progress through the world."
+            ]
+            
+            for i, line in enumerate(explanation_lines):
+                exp_text = self.font_small.render(line, True, PALETTE['text_secondary'])
+                exp_rect = exp_text.get_rect(center=(SCREEN_WIDTH//2, SCREEN_HEIGHT//2 - 80 + i * 25))
+                self.screen.blit(exp_text, exp_rect)
         
         # Professional stats panel
         stats = [

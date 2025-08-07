@@ -56,6 +56,7 @@ PALETTE = {
     'particle_fire': (255, 69, 0),
     'particle_nature': (50, 205, 50),
     'particle_gold': (255, 215, 0),
+    'item_gold': (255, 215, 0),
 }
 
 class AdvancedSprite:
@@ -209,6 +210,30 @@ class ItemSprite(AdvancedSprite):
             ]
             for rect in teeth_rects:
                 pygame.draw.rect(self.surface, PALETTE['item_key'], rect)
+        
+        elif self.item_type == "coin":
+            # Shiny coin with detailed design
+            pygame.draw.circle(self.surface, PALETTE['item_gold'], center, 10)
+            pygame.draw.circle(self.surface, (255, 255, 150), center, 8)
+            pygame.draw.circle(self.surface, PALETTE['item_gold'], center, 6)
+            
+            # Inner design - star pattern
+            star_points = []
+            for i in range(8):
+                angle = i * math.pi / 4
+                if i % 2 == 0:
+                    radius = 4
+                else:
+                    radius = 2
+                x = center[0] + math.cos(angle) * radius
+                y = center[1] + math.sin(angle) * radius
+                star_points.append((x, y))
+            pygame.draw.polygon(self.surface, (255, 255, 200), star_points)
+            
+            # Sparkle effects around coin
+            sparkle_positions = [(6, 6), (26, 6), (6, 26), (26, 26), (16, 4), (4, 16), (28, 16), (16, 28)]
+            for pos in sparkle_positions:
+                pygame.draw.circle(self.surface, (255, 255, 255), pos, 1)
 
 class DoorSprite(AdvancedSprite):
     """Detailed door sprite with panels and hardware"""

@@ -1,29 +1,15 @@
 {
   "doors_opened": [],
-  "seeds_planted": [
-    "garden_seed",
-    "garden_seed",
-    "garden_seed"
-  ],
+  "seeds_planted": [],
   "items_collected": [
-    "seed",
-    "seed",
-    "seed",
-    "seed",
-    "seed",
-    "seed",
-    "seed",
-    "seed"
+    "key"
   ],
   "npcs_talked_to": [
-    "Talking Tree",
-    "Mirror Twin"
+    "Talking Tree"
   ],
-  "switches_activated": [
-    "switch1"
-  ],
+  "switches_activated": [],
   "vines_burned": [],
   "areas_unlocked": [],
-  "life_count": 9,
-  "total_time_played": 88.14999999999975
+  "life_count": 1,
+  "total_time_played": 10.001000000000003
 }
