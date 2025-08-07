@@ -1,0 +1,25 @@
+{
+  "doors_opened": [],
+  "seeds_planted": [],
+  "items_collected": [
+    "seed",
+    "seed",
+    "seed",
+    "seed",
+    "seed",
+    "seed",
+    "seed",
+    "seed"
+  ],
+  "npcs_talked_to": [
+    "Talking Tree",
+    "Mirror Twin"
+  ],
+  "switches_activated": [
+    "switch1"
+  ],
+  "vines_burned": [],
+  "areas_unlocked": [],
+  "life_count": 8,
+  "total_time_played": 80.06600000000073
+}
