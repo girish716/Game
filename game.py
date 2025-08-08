@@ -43,7 +43,11 @@ COLORS = {
     'torch': (255, 100, 50),
     'ice': (150, 200, 255),
     'enemy': (255, 50, 50),
-    'crystal': (200, 100, 255)
+    'crystal': (200, 100, 255),
+    'red_crystal': (255, 50, 50),
+    'blue_crystal': (50, 50, 255),
+    'green_crystal': (50, 255, 50),
+    'time_crystal': (100, 200, 255)
 }
 
 class GameState(Enum):
@@ -226,13 +230,19 @@ class Item(GameObject):
         self.glow_time += dt * 3
         self.sparkle_timer += dt
     
-    def collect(self):
-        """Collect the item with sound effect"""
+    def collect(self, game=None):
+        """Mark item as collected and play sound"""
         if not self.collected:
             self.collected = True
-            self.play_collect_sound()
+            self.play_collection_sound()
+            
+            # Handle time crystal bonus
+            if self.type == 'time_crystal' and game:
+                game.add_time_bonus(10.0)
+                return True  # Indicate time bonus was given
+        return False
     
-    def play_collect_sound(self):
+    def play_collection_sound(self):
         """Play collection sound effect"""
         try:
             import array
@@ -353,6 +363,10 @@ class Door(GameObject):
             pass
     
     def draw(self, screen):
+        # Always draw door frame
+        frame_rect = pygame.Rect(self.x - 2, self.y - 2, self.width + 4, self.height + 4)
+        pygame.draw.rect(screen, (80, 60, 40), frame_rect)
+        
         if not self.is_open:
             # Enhanced door graphics
             # Door frame
@@ -378,6 +392,22 @@ class Door(GameObject):
             handle_center = (self.x + self.width - 6, self.y + self.height//2)
             pygame.draw.circle(screen, (184, 134, 11), handle_center, 4)
             pygame.draw.circle(screen, (200, 150, 20), handle_center, 2)
+        else:
+            # Open door - Draw partially opened door
+            # Dark doorway opening (passage)
+            doorway_rect = pygame.Rect(self.x + 5, self.y, self.width - 10, self.height)
+            pygame.draw.rect(screen, (30, 30, 30), doorway_rect)
+            
+            # Partially visible door (swung open to the left)
+            door_width = 8
+            partial_door = pygame.Rect(self.x - door_width, self.y, door_width, self.height)
+            pygame.draw.rect(screen, (101, 67, 33), partial_door)
+            
+            # Door edge shadow
+            pygame.draw.line(screen, (60, 40, 20), (self.x, self.y), (self.x, self.y + self.height), 2)
+            
+            # Subtle glow around the opening to indicate it's passable
+            pygame.draw.rect(screen, (100, 200, 100), doorway_rect, 2)
 
 class NPC(GameObject):
     """Non-player characters"""
@@ -434,29 +464,30 @@ class Level:
             npc.draw(screen)
 
 class Level1_FirstSteps(Level):
-    """Level 1: Taking Initiative"""
+    """Level 1: Taking Initiative - Learn basic movement and interaction"""
     def __init__(self):
-        super().__init__(1, "First Steps", "Collect the glowing orb to begin your journey")
-        self.lesson = "Success begins with taking the first step. Every journey starts with action. In life, the hardest part is often just getting started."
-        self.setup()
-    
-    def setup(self):
-        # Place a glowing orb in the center
-        orb = Item(WINDOW_WIDTH//2 - 10, WINDOW_HEIGHT//2 - 10, 'orb')
-        self.items.append(orb)
-    
-    def update(self, dt: float, player: Player) -> bool:
+        super().__init__(1, "First Steps", "Walk to the glowing orb and press SPACE to collect it!")
+        self.lesson = "Success begins with taking the first step. Every journey starts with action."
+        
+        # Create the orb to collect
+        self.orb = Item(WINDOW_WIDTH//2, WINDOW_HEIGHT//2, 'orb')
+        # Add a time crystal for bonus time
+        self.time_crystal = Item(150, 150, 'time_crystal')
+        self.items = [self.orb, self.time_crystal]
+        
+    def update(self, dt: float, player: Player, game=None) -> bool:
         super().update(dt, player)
         # Check if orb is collected
         for item in self.items:
             if not item.collected and player.rect.colliderect(item.rect):
-                item.collect()  # Use proper collect method with sound
-                return True  # Level complete
+                time_bonus_given = item.collect(game)  # Pass game instance for time bonus
+                if item.type == 'orb':
+                    return True  # Level complete
         return False
     
     def handle_interaction(self, player: Player) -> Optional[str]:
         # Auto-collect orb on contact, no manual interaction needed
-        return "Walk into the orb to collect it!"
+        return "Press SPACE to interact with the Ancient Sage"
 
 class Level2_TheDoor(Level):
     """Level 2: Preparation Opens Opportunities"""
@@ -476,20 +507,20 @@ class Level2_TheDoor(Level):
         door = Door(WINDOW_WIDTH - 100, WINDOW_HEIGHT//2 - 25)
         self.doors.append(door)
     
-    def update(self, dt: float, player: Player) -> bool:
+    def update(self, dt: float, player: Player, game=None) -> bool:
         super().update(dt, player)
         
-        # Check if key is collected
+        # Check item collection
         for item in self.items:
             if not item.collected and player.rect.colliderect(item.rect):
-                item.collect()
-                player.inventory = 'key'
-                self.key_collected = True
+                item.collect(game)  # Pass game instance for time bonus
+                if item.type == 'key':
+                    player.inventory = 'key'
+                    self.key_collected = True
         
-        # Check if door is opened and player walks through
-        for door in self.doors:
-            if door.is_open and player.rect.colliderect(door.rect):
-                return True  # Level complete
+        # Check if player walks through open door
+        if self.doors[0].is_open and player.rect.colliderect(self.doors[0].rect):
+            return True  # Level complete
         
         return False
     
@@ -529,75 +560,502 @@ class Level3_TimePressure(Level):
     def __init__(self):
         super().__init__(3, "Time Pressure", "Collect all 3 coins before time runs out!")
         self.lesson = "Deadlines force us to prioritize and focus on what truly matters. Time pressure can be a powerful motivator that helps us achieve more than we thought possible."
-        self.coins_needed = 3
-        self.coins_collected = 0
-        self.setup()
-    
-    def setup(self):
-        # Place 3 coins in different locations
-        coin1 = Item(150, 200, 'coin')
-        coin2 = Item(WINDOW_WIDTH - 150, 300, 'coin')
-        coin3 = Item(WINDOW_WIDTH//2, 500, 'coin')
         
-        self.items.extend([coin1, coin2, coin3])
-    
-    def update(self, dt: float, player: Player) -> bool:
+        # Create 3 coins to collect
+        self.coins = [
+            Item(200, 200, 'coin'),
+            Item(400, 150, 'coin'),
+            Item(600, 300, 'coin')
+        ]
+        # Add time crystal for bonus time
+        self.time_crystal = Item(300, 400, 'time_crystal')
+        self.items = self.coins.copy() + [self.time_crystal]
+        self.coins_collected = 0
+        self.target_coins = 3
+        
+    def update(self, dt: float, player: Player, game=None) -> bool:
         super().update(dt, player)
         
-        # Check coin collection
+        # Check item collection (coins and time crystal)
         for item in self.items:
             if not item.collected and player.rect.colliderect(item.rect):
-                item.collect()
-                self.coins_collected += 1
+                item.collect(game)  # Pass game instance for time bonus
+                if item.type == 'coin':
+                    self.coins_collected += 1
                 
-                # Play encouraging sound for each coin
-                if self.coins_collected == self.coins_needed:
-                    # Victory sound when all coins collected
-                    self.play_victory_sound()
+                    if self.coins_collected >= self.target_coins:
+                        return True  # Level complete
         
-        # Level complete when all coins collected
-        return self.coins_collected >= self.coins_needed
+        return False
     
-    def play_victory_sound(self):
-        """Play victory fanfare"""
-        try:
-            import array
-            duration = 1.0
-            sample_rate = 22050
-            frames = int(duration * sample_rate)
-            sound_array = array.array('h', [0] * frames)
-            
-            # Victory chord progression
-            notes = [261.63, 329.63, 392.00, 523.25]  # C major chord
-            
-            for i in range(frames):
-                t = float(i) / sample_rate
-                wave = 0
-                for j, freq in enumerate(notes):
-                    delay = j * 0.1
-                    if t > delay:
-                        note_t = t - delay
-                        amplitude = 8000 * math.exp(-note_t * 2)
-                        wave += amplitude * math.sin(2 * math.pi * freq * note_t)
-                
-                sound_array[i] = int(wave / len(notes))
-            
-            sound = pygame.mixer.Sound(buffer=sound_array)
-            sound.set_volume(0.8)
-            sound.play()
-        except:
-            pass
-    
-    def get_progress_message(self) -> str:
-        """Get current progress message"""
-        remaining = self.coins_needed - self.coins_collected
+    def get_objective_text(self) -> str:
+        remaining = self.target_coins - self.coins_collected
         if remaining > 0:
-            return f"Collect {remaining} more coin{'s' if remaining > 1 else ''}!"
+            return f"Collect {remaining} more coins before time runs out!"
         else:
-            return "All coins collected! Well done!"
+            return "All coins collected! Level complete!"
     
     def handle_interaction(self, player: Player) -> Optional[str]:
-        return self.get_progress_message()
+        return None  # No special interactions needed
+
+# NPC and Level 4 classes
+class NPC:
+    """Non-player character with dialogue system"""
+    def __init__(self, x: int, y: int, name: str, color: tuple):
+        self.rect = pygame.Rect(x, y, 40, 60)
+        self.name = name
+        self.color = color
+        self.dialogue_state = 0
+        self.max_dialogues = 3
+        self.animation_timer = 0
+        self.glow_intensity = 0
+    
+    def update(self, dt: float):
+        """Update NPC animations"""
+        self.animation_timer += dt * 2
+        self.glow_intensity = int(50 + 30 * math.sin(self.animation_timer))
+    
+    def draw(self, screen: pygame.Surface):
+        """Draw animated NPC with glowing effect"""
+        # Main body (sage robes)
+        pygame.draw.ellipse(screen, self.color, self.rect)
+        pygame.draw.ellipse(screen, (255, 255, 255), self.rect, 2)
+        
+        # Glowing eyes
+        eye_y = self.rect.y + 15
+        pygame.draw.circle(screen, (100, 200, 255), (self.rect.x + 12, eye_y), 3)
+        pygame.draw.circle(screen, (100, 200, 255), (self.rect.x + 28, eye_y), 3)
+        
+        # Staff (floating beside NPC)
+        staff_x = self.rect.x + 45
+        staff_y = self.rect.y + int(5 * math.sin(self.animation_timer))
+        pygame.draw.line(screen, (139, 69, 19), (staff_x, staff_y), (staff_x, staff_y + 50), 3)
+        pygame.draw.circle(screen, (255, 215, 0), (staff_x, staff_y), 6)
+        
+        # Interaction hint
+        hint_text = "SPACE to talk"
+        font = pygame.font.Font(None, 20)
+        hint_surface = font.render(hint_text, True, (255, 255, 100))
+        hint_rect = hint_surface.get_rect(center=(self.rect.centerx, self.rect.y - 15))
+        screen.blit(hint_surface, hint_rect)
+    
+    def get_dialogue(self) -> str:
+        """Get current dialogue based on state"""
+        dialogues = [
+            "Greetings, traveler. I am the Keeper of Ancient Wisdom. The path forward lies where shadows dance with light. Seek the place where darkness points to truth.",
+            "Still puzzled? Listen well: Light creates shadow, shadow reveals secrets. The torch you seek rests nearby, waiting to illuminate the way.",
+            "One final hint, young seeker: Place the flame where it casts the longest shadow toward the hidden. The ancient switch awaits the touch of darkness."
+        ]
+        
+        if self.dialogue_state < len(dialogues):
+            dialogue = dialogues[self.dialogue_state]
+            self.dialogue_state = min(self.dialogue_state + 1, self.max_dialogues - 1)
+            return dialogue
+        else:
+            return "The wisdom has been shared. Now you must apply what you have learned."
+
+class TorchPlacement:
+    """Represents a torch that can be placed and creates shadows"""
+    def __init__(self, x: int, y: int):
+        self.rect = pygame.Rect(x, y, 20, 30)
+        self.placed = False
+        self.light_radius = 100
+        self.flame_animation = 0
+    
+    def update(self, dt: float):
+        """Update torch animations"""
+        self.flame_animation += dt * 8
+    
+    def draw(self, screen: pygame.Surface):
+        """Draw torch with flame animation"""
+        if not self.placed:
+            return
+            
+        # Torch handle
+        pygame.draw.rect(screen, (139, 69, 19), self.rect)
+        
+        # Animated flame
+        flame_height = int(15 + 5 * math.sin(self.flame_animation))
+        flame_width = int(12 + 3 * math.sin(self.flame_animation * 1.2))
+        flame_rect = pygame.Rect(self.rect.centerx - flame_width//2, self.rect.y - flame_height, flame_width, flame_height)
+        
+        # Multi-layered flame effect
+        pygame.draw.ellipse(screen, (255, 100, 0), flame_rect)
+        inner_flame = pygame.Rect(flame_rect.x + 2, flame_rect.y + 3, flame_rect.width - 4, flame_rect.height - 6)
+        pygame.draw.ellipse(screen, (255, 200, 0), inner_flame)
+        
+        # Light glow effect
+        glow_surface = pygame.Surface((self.light_radius * 2, self.light_radius * 2), pygame.SRCALPHA)
+        glow_color = (255, 200, 100, 30)
+        pygame.draw.circle(glow_surface, glow_color, (self.light_radius, self.light_radius), self.light_radius)
+        screen.blit(glow_surface, (self.rect.centerx - self.light_radius, self.rect.centery - self.light_radius))
+    
+    def cast_shadow(self, obstacle_rect: pygame.Rect) -> pygame.Rect:
+        """Calculate shadow cast by torch on an obstacle"""
+        if not self.placed:
+            return pygame.Rect(0, 0, 0, 0)
+        
+        # Simple shadow calculation - extend rectangle away from torch
+        torch_center = (self.rect.centerx, self.rect.centery)
+        obstacle_center = (obstacle_rect.centerx, obstacle_rect.centery)
+        
+        # Calculate shadow direction
+        dx = obstacle_center[0] - torch_center[0]
+        dy = obstacle_center[1] - torch_center[1]
+        
+        # Normalize and extend
+        distance = math.sqrt(dx*dx + dy*dy)
+        if distance > 0:
+            shadow_length = 80
+            shadow_dx = (dx / distance) * shadow_length
+            shadow_dy = (dy / distance) * shadow_length
+            
+            shadow_x = obstacle_center[0] + shadow_dx
+            shadow_y = obstacle_center[1] + shadow_dy
+            
+            return pygame.Rect(shadow_x - 15, shadow_y - 15, 30, 30)
+        
+        return pygame.Rect(0, 0, 0, 0)
+
+class Level4_ShadowBasics(Level):
+    """Level 4: Shadow Basics - Learn simple cause and effect with shadows"""
+    def __init__(self):
+        super().__init__(4, "Shadow Basics", "Place the torch near the pillar to reveal the hidden key!")
+        self.lesson = "Every action has consequences. Understanding cause and effect helps us make better decisions in life."
+        
+        # Create a simple torch item
+        self.torch_item = Item(150, 300, 'torch')
+        # Add time crystal for bonus time
+        self.time_crystal = Item(100, 100, 'time_crystal')
+        self.items = [self.torch_item, self.time_crystal]
+        
+        # Create a pillar that casts shadow
+        self.pillar = pygame.Rect(400, 200, 40, 100)
+        
+        # Create torch placement spot near pillar
+        self.torch_spot = pygame.Rect(320, 280, 50, 40)
+        
+        # Hidden key that appears when torch is placed correctly
+        self.hidden_key = Item(450, 320, 'key')
+        self.hidden_key.collected = True  # Start hidden
+        self.key_revealed = False
+        
+        # Exit door
+        self.exit_door = Door(650, 250)
+        self.doors = [self.exit_door]
+        
+        # State tracking
+        self.torch_carried = False
+        self.torch_placed = False
+        
+    def update(self, dt: float, player: Player, game=None) -> bool:
+        super().update(dt, player)
+        
+        # Check item collection
+        for item in self.items:
+            if not item.collected and player.rect.colliderect(item.rect):
+                item.collect(game)
+                if item.type == 'torch':
+                    self.torch_carried = True
+        
+        # Check if hidden key is revealed and can be collected
+        if self.key_revealed and not self.hidden_key.collected:
+            if player.rect.colliderect(self.hidden_key.rect):
+                self.hidden_key.collect(game)
+                player.inventory = 'key'
+        
+        # Check door interaction
+        if player.inventory == 'key' and player.rect.colliderect(self.exit_door.rect):
+            return True  # Level complete
+        
+        return False
+    
+    def handle_interaction(self, player: Player) -> Optional[str]:
+        # Torch placement
+        if self.torch_carried and not self.torch_placed:
+            if player.rect.colliderect(self.torch_spot):
+                self.torch_placed = True
+                self.torch_carried = False
+                # Reveal the hidden key
+                self.key_revealed = True
+                self.hidden_key.collected = False  # Make it collectible
+                return "The torch light reveals a hidden key!"
+        
+        # Door interaction
+        if player.inventory == 'key':
+            if player.rect.colliderect(self.exit_door.rect):
+                self.exit_door.is_open = True
+                return "Door unlocked! Walk through to complete the level."
+        elif player.rect.colliderect(self.exit_door.rect):
+            return "You need a key to open this door."
+        
+        return None
+    
+    def draw(self, screen: pygame.Surface):
+        """Draw level with clear visual feedback"""
+        super().draw(screen)
+        
+        # Draw pillar
+        pygame.draw.rect(screen, (120, 120, 120), self.pillar)
+        pygame.draw.rect(screen, (160, 160, 160), self.pillar, 3)
+        
+        # Draw torch placement spot
+        if self.torch_carried:
+            # Highlight the placement area when carrying torch
+            pygame.draw.rect(screen, (255, 255, 100, 100), self.torch_spot)
+            pygame.draw.rect(screen, (255, 255, 0), self.torch_spot, 2)
+            
+            # Add instruction text
+            font = pygame.font.Font(None, 24)
+            instruction = "Press SPACE near the pillar to place torch"
+            text_surface = font.render(instruction, True, (255, 255, 100))
+            screen.blit(text_surface, (200, 450))
+        
+        # Draw placed torch with flame effect
+        if self.torch_placed:
+            torch_center = (self.torch_spot.centerx, self.torch_spot.centery)
+            # Torch base
+            pygame.draw.circle(screen, (139, 69, 19), torch_center, 8)
+            # Flame effect
+            flame_colors = [(255, 100, 0), (255, 200, 0), (255, 255, 100)]
+            for i, color in enumerate(flame_colors):
+                flame_size = 12 - i * 3
+                pygame.draw.circle(screen, color, (torch_center[0], torch_center[1] - 15), flame_size)
+        
+        # Draw shadow effect when torch is placed
+        if self.torch_placed:
+            # Simple shadow rectangle
+            shadow_rect = pygame.Rect(self.pillar.right, self.pillar.bottom - 20, 60, 30)
+            pygame.draw.ellipse(screen, (0, 0, 0, 80), shadow_rect)
+        
+        # Draw revealed key with glow effect
+        if self.key_revealed and not self.hidden_key.collected:
+            # Glow effect
+            glow_surface = pygame.Surface((60, 60), pygame.SRCALPHA)
+            pygame.draw.circle(glow_surface, (255, 255, 0, 100), (30, 30), 30)
+            screen.blit(glow_surface, (self.hidden_key.rect.x - 20, self.hidden_key.rect.y - 20))
+            
+            # Draw key
+            self.hidden_key.draw(screen)
+            
+            # Add discovery text
+            font = pygame.font.Font(None, 24)
+            discovery_text = "A key appeared in the shadow!"
+            text_surface = font.render(discovery_text, True, (255, 255, 100))
+            screen.blit(text_surface, (300, 400))
+
+class Level5_TheHelper(Level):
+    """Level 5: NPC interaction with simplified puzzle"""
+    def __init__(self):
+        super().__init__(5, "The Helper", "Talk to the guide, then collect all 3 colored crystals to complete the puzzle!")
+        self.lesson = "The wisest people know when to ask for help and guidance. Clear communication and teamwork lead to better solutions."
+        
+        # Create friendly guide NPC
+        self.guide = NPC(150, 200, "Helpful Guide", (50, 150, 100))
+        
+        # Create colored crystals to collect
+        self.red_crystal = Item(300, 150, 'red_crystal')
+        self.blue_crystal = Item(500, 200, 'blue_crystal')
+        self.green_crystal = Item(400, 350, 'green_crystal')
+        
+        # Add time crystal for bonus time
+        self.time_crystal = Item(100, 100, 'time_crystal')
+        self.items = [self.red_crystal, self.blue_crystal, self.green_crystal, self.time_crystal]
+        
+        # Create colored pedestals that need matching crystals
+        self.red_pedestal = pygame.Rect(600, 150, 40, 40)
+        self.blue_pedestal = pygame.Rect(600, 220, 40, 40)
+        self.green_pedestal = pygame.Rect(600, 290, 40, 40)
+        
+        # Track which crystals are placed correctly
+        self.red_placed = False
+        self.blue_placed = False
+        self.green_placed = False
+        
+        # Exit door
+        self.exit_door = Door(700, 200)
+        self.doors = [self.exit_door]
+        
+        # Dialogue state
+        self.showing_dialogue = False
+        self.dialogue_text = ""
+        self.dialogue_timer = 0
+        self.help_given = False
+        
+    def update(self, dt: float, player: Player, game=None) -> bool:
+        super().update(dt, player)
+        
+        # Update NPC animation
+        self.guide.update(dt)
+        
+        # Update dialogue timer
+        if self.dialogue_timer > 0:
+            self.dialogue_timer -= dt
+            if self.dialogue_timer <= 0:
+                self.showing_dialogue = False
+        
+        # Check crystal collection - auto-place crystals to avoid inventory issues
+        for item in self.items:
+            if not item.collected and player.rect.colliderect(item.rect):
+                item.collect(game)
+                if item.type == 'red_crystal' and not self.red_placed:
+                    self.red_placed = True
+                    print(f"DEBUG: Red crystal collected! Status - Red: {self.red_placed}, Blue: {self.blue_placed}, Green: {self.green_placed}")
+                    # Don't return here - continue level
+                elif item.type == 'blue_crystal' and not self.blue_placed:
+                    self.blue_placed = True
+                    print(f"DEBUG: Blue crystal collected! Status - Red: {self.red_placed}, Blue: {self.blue_placed}, Green: {self.green_placed}")
+                    # Don't return here - continue level
+                elif item.type == 'green_crystal' and not self.green_placed:
+                    self.green_placed = True
+                    print(f"DEBUG: Green crystal collected! Status - Red: {self.red_placed}, Blue: {self.blue_placed}, Green: {self.green_placed}")
+                    # Don't return here - continue level
+        
+        # Check if all crystals are placed correctly
+        if self.red_placed and self.blue_placed and self.green_placed:
+            if not self.exit_door.is_open:
+                print("DEBUG: All crystals collected! Opening door...")
+            self.exit_door.is_open = True
+            
+            # Check if player walks through open door
+            if player.rect.colliderect(self.exit_door.rect):
+                print("DEBUG: Player walked through door - level complete!")
+                return True  # Level complete
+        
+        return False
+    
+    def draw(self, screen: pygame.Surface):
+        """Draw level with clear color matching puzzle"""
+        super().draw(screen)
+        
+        # Draw colored pedestals
+        # Red pedestal
+        pygame.draw.rect(screen, (200, 50, 50), self.red_pedestal)
+        pygame.draw.rect(screen, (255, 100, 100), self.red_pedestal, 3)
+        if self.red_placed:
+            # Draw placed crystal
+            pygame.draw.circle(screen, (255, 50, 50), self.red_pedestal.center, 15)
+        
+        # Blue pedestal
+        pygame.draw.rect(screen, (50, 50, 200), self.blue_pedestal)
+        pygame.draw.rect(screen, (100, 100, 255), self.blue_pedestal, 3)
+        if self.blue_placed:
+            # Draw placed crystal
+            pygame.draw.circle(screen, (50, 50, 255), self.blue_pedestal.center, 15)
+        
+        # Green pedestal
+        pygame.draw.rect(screen, (50, 200, 50), self.green_pedestal)
+        pygame.draw.rect(screen, (100, 255, 100), self.green_pedestal, 3)
+        if self.green_placed:
+            # Draw placed crystal
+            pygame.draw.circle(screen, (50, 255, 50), self.green_pedestal.center, 15)
+        
+        # Draw instruction text
+        font = pygame.font.Font(None, 24)
+        if not self.help_given:
+            instruction = "Talk to the guide for help!"
+        else:
+            instruction = "Collect crystals and place them on matching colored pedestals"
+        
+        text_surface = font.render(instruction, True, (255, 255, 255))
+        screen.blit(text_surface, (200, 450))
+        
+        # Draw progress indicator
+        progress_text = f"Crystals placed: {sum([self.red_placed, self.blue_placed, self.green_placed])}/3"
+        progress_surface = font.render(progress_text, True, (200, 200, 200))
+        screen.blit(progress_surface, (200, 480))
+        
+        # Draw NPC
+        self.guide.draw(screen)
+        
+        # Draw dialogue if showing
+        if self.showing_dialogue:
+            self.draw_dialogue(screen)
+    
+    def draw_dialogue(self, screen: pygame.Surface):
+        """Draw NPC dialogue box"""
+        # Dialogue panel
+        panel_width = WINDOW_WIDTH - 100
+        panel_height = 120
+        panel_x = 50
+        panel_y = WINDOW_HEIGHT - panel_height - 20
+        
+        panel_rect = pygame.Rect(panel_x, panel_y, panel_width, panel_height)
+        pygame.draw.rect(screen, (20, 20, 40), panel_rect)
+        pygame.draw.rect(screen, (100, 150, 200), panel_rect, 3)
+        
+        # NPC name
+        font_medium = pygame.font.Font(None, 28)
+        name_surface = font_medium.render(self.guide.name, True, (200, 200, 255))
+        screen.blit(name_surface, (panel_x + 15, panel_y + 10))
+        
+        # Dialogue text (wrapped)
+        font_small = pygame.font.Font(None, 24)
+        self.draw_wrapped_text_simple(self.dialogue_text, panel_x + 15, panel_y + 40, 
+                                    panel_width - 30, font_small, (255, 255, 255), screen)
+    
+    def draw_wrapped_text_simple(self, text, x, y, max_width, font, color, screen):
+        """Simple text wrapping for dialogue"""
+        words = text.split(' ')
+        lines = []
+        current_line = []
+        
+        for word in words:
+            test_line = ' '.join(current_line + [word])
+            test_surface = font.render(test_line, True, color)
+            
+            if test_surface.get_width() <= max_width:
+                current_line.append(word)
+            else:
+                if current_line:
+                    lines.append(' '.join(current_line))
+                    current_line = [word]
+                else:
+                    lines.append(word)
+        
+        if current_line:
+            lines.append(' '.join(current_line))
+        
+        # Draw each line
+        line_height = font.get_height() + 2
+        for i, line in enumerate(lines[:3]):  # Limit to 3 lines
+            line_surface = font.render(line, True, color)
+            screen.blit(line_surface, (x, y + i * line_height))
+    
+    def get_objective_text(self) -> str:
+        if not self.torch_item.collected:
+            return "Talk to the sage and find the torch to solve the riddle!"
+        elif not self.torch_carried:
+            return "Pick up the torch and listen to the sage's wisdom!"
+        elif self.torch_placed_index == -1:
+            return "Place the torch to cast shadows and reveal the hidden switch!"
+        elif not self.switch_revealed:
+            return "Try different torch positions to cast the right shadow!"
+        elif not self.switch_activated:
+            return "The switch is revealed! Activate it to open the door!"
+        else:
+            return "Door opened! Walk through to complete the level!"
+    
+    def handle_interaction(self, player: Player) -> Optional[str]:
+        # Check NPC interaction
+        if player.rect.colliderect(self.guide.rect):
+            if not self.help_given:
+                self.dialogue_text = "Welcome! I can help you solve this puzzle. Simply walk over each colored crystal to collect it - they'll automatically place themselves on the matching pedestals. Collect all 3 to open the door!"
+                self.help_given = True
+            else:
+                self.dialogue_text = "Just walk over the crystals to collect them! Red, blue, and green - collect all 3 and the door will open!"
+            
+            self.showing_dialogue = True
+            self.dialogue_timer = 5.0
+            return None
+        
+        # No manual crystal placement needed - crystals auto-place when collected
+        
+        # Check door passage
+        if self.exit_door.is_open and player.rect.colliderect(self.exit_door.rect):
+            return "All crystals placed! Walk through the door!"
+        
+        return None
 
 class TenSecondLifeGame:
     """Main game class"""
@@ -626,6 +1084,11 @@ class TenSecondLifeGame:
         self.show_motivation = False
         self.motivation_quote = ""
         
+        # Time bonus system
+        self.time_bonus_message = ""
+        self.time_bonus_timer = 0
+        self.time_bonus_animation = 0
+        
         # Motivational quotes for second chances
         self.motivation_quotes = [
             "Every master was once a disaster. Your second chance is your opportunity to shine!",
@@ -646,7 +1109,9 @@ class TenSecondLifeGame:
         self.levels = {
             1: Level1_FirstSteps(),
             2: Level2_TheDoor(),
-            3: Level3_TimePressure()
+            3: Level3_TimePressure(),
+            4: Level4_ShadowBasics(),
+            5: Level5_TheHelper()
         }
         
         # Fonts
@@ -659,27 +1124,43 @@ class TenSecondLifeGame:
     
     def load_level(self, level_number: int):
         """Load a specific level"""
-        if level_number in self.levels:
-            self.current_level = self.levels[level_number]
-            self.current_level_num = level_number
-            self.player.reset_position()
-            self.timer = 10.0
-            self.level_complete = False
-            self.show_lesson = False
-            self.next_level_ready = False
+        if level_number == 1:
+            self.current_level = Level1_FirstSteps()
+        elif level_number == 2:
+            self.current_level = Level2_TheDoor()
+        elif level_number == 3:
+            self.current_level = Level3_TimePressure()
+        elif level_number == 4:
+            self.current_level = Level4_ShadowBasics()
+        elif level_number == 5:
+            self.current_level = Level5_TheHelper()
+        self.current_level_num = level_number
+        self.player.reset_position()
+        self.timer = 10.0
+        self.level_complete = False
+        self.show_lesson = False
+        self.next_level_ready = False
+        
+        # Clear time bonus display when loading new level
+        self.time_bonus_message = ""
+        self.time_bonus_timer = 0
+        self.time_bonus_animation = 0
     
     def handle_level_failure(self):
         """Handle when player fails a level (time runs out)"""
         self.lives_remaining -= 1
+        print(f"DEBUG: Life lost! Lives remaining: {self.lives_remaining}")
         
         if self.lives_remaining > 0:
             # Still have lives left - show motivational quote and continue
             self.motivation_quote = random.choice(self.motivation_quotes)
             self.show_motivation = True
             self.state = GameState.DEATH
+            print(f"DEBUG: Going to DEATH state with motivation")
         else:
             # No lives left - game over
             self.state = GameState.GAME_OVER
+            print(f"DEBUG: Going to GAME_OVER state")
     
     def restart_level_completely(self):
         """Completely restart the current level (no progress preservation)"""
@@ -690,6 +1171,10 @@ class TenSecondLifeGame:
             self.levels[2] = Level2_TheDoor()
         elif self.current_level_num == 3:
             self.levels[3] = Level3_TimePressure()
+        elif self.current_level_num == 4:
+            self.levels[4] = Level4_ShadowBasics()
+        elif self.current_level_num == 5:
+            self.levels[5] = Level5_TheHelper()
         
         # Load the fresh level
         self.current_level = self.levels[self.current_level_num]
@@ -703,6 +1188,11 @@ class TenSecondLifeGame:
         self.lives_lived += 1
         self.show_motivation = False
         self.motivation_quote = ""
+        
+        # Clear time bonus display
+        self.time_bonus_message = ""
+        self.time_bonus_timer = 0
+        self.time_bonus_animation = 0
     
     def reset_entire_game(self):
         """Completely reset the entire game to initial state"""
@@ -731,11 +1221,21 @@ class TenSecondLifeGame:
         self.levels = {
             1: Level1_FirstSteps(),
             2: Level2_TheDoor(),
-            3: Level3_TimePressure()
+            3: Level3_TimePressure(),
+            4: Level4_ShadowBasics(),
+            5: Level5_TheHelper()
         }
         
         # Load Level 1
         self.load_level(1)
+    
+    def add_time_bonus(self, bonus_seconds: float):
+        """Add time bonus when collecting time crystals"""
+        self.timer += bonus_seconds
+        self.time_bonus_message = f"+{int(bonus_seconds)} seconds!"
+        self.time_bonus_timer = 3.0  # Show message for 3 seconds
+        self.time_bonus_animation = 0  # Reset animation
+        print(f"DEBUG: Time bonus! +{bonus_seconds} seconds. Timer now: {self.timer:.1f}")
     
     def show_level_lesson(self):
         """Display the life lesson for the current level"""
@@ -780,7 +1280,9 @@ class TenSecondLifeGame:
         self.levels = {
             1: Level1_FirstSteps(),
             2: Level2_TheDoor(),
-            3: Level3_TimePressure()
+            3: Level3_TimePressure(),
+            4: Level4_ShadowBasics(),
+            5: Level5_TheHelper()
         }
         
         # Load Level 1
@@ -831,11 +1333,10 @@ class TenSecondLifeGame:
             self.player.update(dt, keys)
             
             # Update current level
-            if self.current_level:
-                if self.current_level.update(dt, self.player):
-                    self.level_complete = True
-                    self.show_level_lesson()
-                    self.state = GameState.LEVEL_COMPLETE
+            if self.current_level and self.current_level.update(dt, self.player, self):
+                self.level_complete = True
+                self.show_level_lesson()
+                self.state = GameState.LEVEL_COMPLETE
         
         elif self.state == GameState.LEVEL_COMPLETE:
             # Handle lesson display - wait for user input instead of auto-advancing
@@ -843,11 +1344,18 @@ class TenSecondLifeGame:
                 # Lesson stays on screen until user presses SPACE
                 pass
         
-        # Update message timer
+        # Message display timer
         if self.message_timer > 0:
             self.message_timer -= dt
             if self.message_timer <= 0:
                 self.message = ""
+        
+        # Time bonus animation
+        if self.time_bonus_timer > 0:
+            self.time_bonus_timer -= dt
+            self.time_bonus_animation += dt * 3
+            if self.time_bonus_timer <= 0:
+                self.time_bonus_message = ""
     
     def handle_events(self):
         """Handle pygame events"""
@@ -978,15 +1486,35 @@ class TenSecondLifeGame:
         
         # Message display
         if self.message_timer > 0:
-            msg_surface = self.font_medium.render(self.message, True, (255, 255, 100))
-            msg_rect = msg_surface.get_rect(center=(WINDOW_WIDTH//2, WINDOW_HEIGHT//2 + 100))
+            message_surface = self.font_medium.render(self.message, True, (255, 255, 100))
+            message_rect = message_surface.get_rect(center=(WINDOW_WIDTH//2, 100))
             
             # Message background
-            bg_rect = pygame.Rect(msg_rect.x - 20, msg_rect.y - 10, msg_rect.width + 40, msg_rect.height + 20)
-            pygame.draw.rect(self.screen, (0, 0, 0, 180), bg_rect)
+            bg_rect = pygame.Rect(message_rect.x - 10, message_rect.y - 5, 
+                                 message_rect.width + 20, message_rect.height + 10)
+            pygame.draw.rect(self.screen, (0, 0, 0, 150), bg_rect)
             pygame.draw.rect(self.screen, (255, 255, 100), bg_rect, 2)
             
-            self.screen.blit(msg_surface, msg_rect)
+            self.screen.blit(message_surface, message_rect)
+        
+        # Time bonus display
+        if self.time_bonus_timer > 0:
+            # Animated scaling effect
+            scale = 1.0 + 0.3 * math.sin(self.time_bonus_animation * 2)
+            font_size = int(36 * scale)
+            bonus_font = pygame.font.Font(None, font_size)
+            
+            bonus_surface = bonus_font.render(self.time_bonus_message, True, (100, 255, 255))
+            bonus_rect = bonus_surface.get_rect(center=(WINDOW_WIDTH//2, 150))
+            
+            # Glowing background
+            glow_rect = pygame.Rect(bonus_rect.x - 15, bonus_rect.y - 10, 
+                                   bonus_rect.width + 30, bonus_rect.height + 20)
+            glow_color = (50, 150, 255, int(100 * (self.time_bonus_timer / 3.0)))
+            pygame.draw.rect(self.screen, glow_color, glow_rect)
+            pygame.draw.rect(self.screen, (100, 255, 255), glow_rect, 3)
+            
+            self.screen.blit(bonus_surface, bonus_rect)
     
     def draw_lesson_screen(self):
         """Draw the life lesson screen after level completion"""
@@ -1004,8 +1532,8 @@ class TenSecondLifeGame:
         
         # Panel background with gradient effect
         panel_rect = pygame.Rect(panel_x, panel_y, panel_width, panel_height)
-        pygame.draw.rect(self.screen, (40, 40, 60), panel_rect, border_radius=15)
-        pygame.draw.rect(self.screen, (100, 150, 200), panel_rect, 3, border_radius=15)
+        pygame.draw.rect(self.screen, (40, 40, 60), panel_rect)
+        pygame.draw.rect(self.screen, (100, 150, 200), panel_rect, 3)
         
         # "Level Complete!" title
         title_text = f"Level {self.current_level_num} Complete!"
@@ -1039,8 +1567,8 @@ class TenSecondLifeGame:
             # Button background
             button_bg = pygame.Rect(continue_rect.x - 15, continue_rect.y - 8, 
                                    continue_rect.width + 30, continue_rect.height + 16)
-            pygame.draw.rect(self.screen, (0, 100, 0), button_bg, border_radius=8)
-            pygame.draw.rect(self.screen, (100, 255, 100), button_bg, 2, border_radius=8)
+            pygame.draw.rect(self.screen, (0, 100, 0), button_bg)
+            pygame.draw.rect(self.screen, (100, 255, 100), button_bg, 2)
             self.screen.blit(continue_surface, continue_rect)
         else:
             # Final level completed
@@ -1057,8 +1585,8 @@ class TenSecondLifeGame:
             # Button background
             button_bg = pygame.Rect(continue_rect.x - 15, continue_rect.y - 8, 
                                    continue_rect.width + 30, continue_rect.height + 16)
-            pygame.draw.rect(self.screen, (0, 100, 0), button_bg, border_radius=8)
-            pygame.draw.rect(self.screen, (100, 255, 100), button_bg, 2, border_radius=8)
+            pygame.draw.rect(self.screen, (0, 100, 0), button_bg)
+            pygame.draw.rect(self.screen, (100, 255, 100), button_bg, 2)
             self.screen.blit(continue_surface, continue_rect)
     
     def draw_wrapped_text(self, text, x, y, max_width, font, color, center=False):
@@ -1118,8 +1646,8 @@ class TenSecondLifeGame:
         panel_y = (WINDOW_HEIGHT - panel_height) // 2
         
         panel_rect = pygame.Rect(panel_x, panel_y, panel_width, panel_height)
-        pygame.draw.rect(self.screen, (40, 20, 20), panel_rect, border_radius=15)
-        pygame.draw.rect(self.screen, (255, 100, 100), panel_rect, 3, border_radius=15)
+        pygame.draw.rect(self.screen, (40, 20, 20), panel_rect)
+        pygame.draw.rect(self.screen, (255, 100, 100), panel_rect, 3)
         
         if self.lives_remaining > 0 and self.show_motivation:
             # Still have lives left - show motivation
@@ -1151,8 +1679,8 @@ class TenSecondLifeGame:
             # Button background
             button_bg = pygame.Rect(restart_rect.x - 25, restart_rect.y - 15, 
                                    restart_rect.width + 50, restart_rect.height + 30)
-            pygame.draw.rect(self.screen, (0, 100, 0), button_bg, border_radius=12)
-            pygame.draw.rect(self.screen, (100, 255, 100), button_bg, 3, border_radius=12)
+            pygame.draw.rect(self.screen, (0, 100, 0), button_bg)
+            pygame.draw.rect(self.screen, (100, 255, 100), button_bg, 3)
             self.screen.blit(restart_surface, restart_rect)
             
             # Warning text based on lives remaining
@@ -1203,8 +1731,8 @@ class TenSecondLifeGame:
         panel_y = (WINDOW_HEIGHT - panel_height) // 2
         
         panel_rect = pygame.Rect(panel_x, panel_y, panel_width, panel_height)
-        pygame.draw.rect(self.screen, (60, 20, 20), panel_rect, border_radius=20)
-        pygame.draw.rect(self.screen, (255, 100, 100), panel_rect, 4, border_radius=20)
+        pygame.draw.rect(self.screen, (60, 20, 20), panel_rect)
+        pygame.draw.rect(self.screen, (255, 100, 100), panel_rect, 4)
         
         # Game Over title
         title_text = "GAME OVER"
@@ -1244,8 +1772,8 @@ class TenSecondLifeGame:
         # Button background
         button_bg = pygame.Rect(try_again_rect.x - 25, try_again_rect.y - 15, 
                                try_again_rect.width + 50, try_again_rect.height + 30)
-        pygame.draw.rect(self.screen, (0, 100, 0), button_bg, border_radius=15)
-        pygame.draw.rect(self.screen, (100, 255, 100), button_bg, 3, border_radius=15)
+        pygame.draw.rect(self.screen, (0, 100, 0), button_bg)
+        pygame.draw.rect(self.screen, (100, 255, 100), button_bg, 3)
         self.screen.blit(try_again_surface, try_again_rect)
     
     def draw_victory_screen(self):
@@ -1264,8 +1792,8 @@ class TenSecondLifeGame:
         
         # Panel background
         panel_rect = pygame.Rect(panel_x, panel_y, panel_width, panel_height)
-        pygame.draw.rect(self.screen, (40, 40, 60), panel_rect, border_radius=15)
-        pygame.draw.rect(self.screen, (255, 215, 0), panel_rect, 3, border_radius=15)
+        pygame.draw.rect(self.screen, (40, 40, 60), panel_rect)
+        pygame.draw.rect(self.screen, (255, 215, 0), panel_rect, 3)
         
         # Victory text
         victory_text = "🎉 CONGRATULATIONS! 🎉"
@@ -1311,8 +1839,8 @@ class TenSecondLifeGame:
         # Button background
         button_bg = pygame.Rect(play_again_rect.x - 20, play_again_rect.y - 10, 
                                play_again_rect.width + 40, play_again_rect.height + 20)
-        pygame.draw.rect(self.screen, (0, 100, 0), button_bg, border_radius=10)
-        pygame.draw.rect(self.screen, (100, 255, 100), button_bg, 2, border_radius=10)
+        pygame.draw.rect(self.screen, (0, 100, 0), button_bg)
+        pygame.draw.rect(self.screen, (100, 255, 100), button_bg, 2)
         self.screen.blit(play_again_surface, play_again_rect)
         
         # Menu instruction
@@ -1336,8 +1864,8 @@ class TenSecondLifeGame:
         panel_y = (WINDOW_HEIGHT - panel_height) // 2
         
         panel_rect = pygame.Rect(panel_x, panel_y, panel_width, panel_height)
-        pygame.draw.rect(self.screen, (30, 30, 50, 200), panel_rect, border_radius=20)
-        pygame.draw.rect(self.screen, (100, 150, 200), panel_rect, 3, border_radius=20)
+        pygame.draw.rect(self.screen, (30, 30, 50, 200), panel_rect)
+        pygame.draw.rect(self.screen, (100, 150, 200), panel_rect, 3)
         
         # Title
         title = self.font_large.render("10 Second Life", True, (255, 255, 100))
@@ -1351,7 +1879,7 @@ class TenSecondLifeGame:
         # Game description
         description_lines = [
             "A unique puzzle-adventure where each life lasts only 10 seconds!",
-            "Master 3 challenging levels while learning valuable life lessons.",
+            "Master 5 challenging levels while learning valuable life lessons.",
             "Your actions persist across lives - use strategy and wisdom to succeed."
         ]
         
@@ -1363,36 +1891,38 @@ class TenSecondLifeGame:
         # Level preview
         levels_header = "Levels & Life Lessons:"
         header_surface = self.font_medium.render(levels_header, True, (255, 200, 100))
-        header_rect = header_surface.get_rect(center=(WINDOW_WIDTH//2, panel_y + 250))
+        header_rect = header_surface.get_rect(center=(WINDOW_WIDTH//2, panel_y + 240))
         self.screen.blit(header_surface, header_rect)
         
         level_info = [
             "Level 1: First Steps - Learn the power of taking initiative",
             "Level 2: The Door - Discover how preparation opens opportunities", 
-            "Level 3: Time Pressure - Master focus under deadlines"
+            "Level 3: Time Pressure - Master focus under deadlines",
+            "Level 4: Shadow Basics - Understand cause and effect relationships",
+            "Level 5: The Helper - Learn the value of seeking wisdom from others"
         ]
         
         for i, level in enumerate(level_info):
             level_surface = self.font_small.render(level, True, (255, 255, 255))
-            level_rect = level_surface.get_rect(center=(WINDOW_WIDTH//2, panel_y + 280 + i * 25))
+            level_rect = level_surface.get_rect(center=(WINDOW_WIDTH//2, panel_y + 265 + i * 22))
             self.screen.blit(level_surface, level_rect)
         
-        # Start button
+        # Start button (moved down to accommodate 5 levels)
         start_text = "Press SPACE to Begin Your Journey"
         start_surface = self.font_medium.render(start_text, True, (100, 255, 100))
-        start_rect = start_surface.get_rect(center=(WINDOW_WIDTH//2, panel_y + 380))
+        start_rect = start_surface.get_rect(center=(WINDOW_WIDTH//2, panel_y + 400))
         
         # Button background
         button_bg = pygame.Rect(start_rect.x - 25, start_rect.y - 15, 
                                start_rect.width + 50, start_rect.height + 30)
-        pygame.draw.rect(self.screen, (0, 100, 0), button_bg, border_radius=15)
-        pygame.draw.rect(self.screen, (100, 255, 100), button_bg, 3, border_radius=15)
+        pygame.draw.rect(self.screen, (0, 100, 0), button_bg)
+        pygame.draw.rect(self.screen, (100, 255, 100), button_bg, 3)
         self.screen.blit(start_surface, start_rect)
         
-        # Controls
+        # Controls (moved down and made more compact)
         controls_header = "Controls:"
         controls_surface = self.font_small.render(controls_header, True, (255, 200, 100))
-        controls_rect = controls_surface.get_rect(center=(WINDOW_WIDTH//2, panel_y + 450))
+        controls_rect = controls_surface.get_rect(center=(WINDOW_WIDTH//2, panel_y + 460))
         self.screen.blit(controls_surface, controls_rect)
         
         controls = [
@@ -1401,7 +1931,7 @@ class TenSecondLifeGame:
         
         for i, control in enumerate(controls):
             control_surface = self.font_small.render(control, True, (200, 200, 200))
-            control_rect = control_surface.get_rect(center=(WINDOW_WIDTH//2, panel_y + 475 + i * 20))
+            control_rect = control_surface.get_rect(center=(WINDOW_WIDTH//2, panel_y + 480 + i * 18))
             self.screen.blit(control_surface, control_rect)
     
     def draw_level_complete(self):
@@ -1452,12 +1982,20 @@ class TenSecondLifeGame:
     
     def run(self):
         """Main game loop"""
-        while self.running:
-            dt = self.clock.tick(FPS) / 1000.0
-            
-            self.handle_events()
-            self.update(dt)
-            self.draw()
+        try:
+            while self.running:
+                dt = self.clock.tick(FPS) / 1000.0
+                
+                self.handle_events()
+                self.update(dt)
+                self.draw()
+        except Exception as e:
+            print(f"Game error: {e}")
+            print(f"Game state: {self.state}")
+            print(f"Lives remaining: {self.lives_remaining}")
+            print(f"Current level: {self.current_level_num}")
+            import traceback
+            traceback.print_exc()
         
         pygame.quit()
 
