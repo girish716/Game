@@ -603,7 +603,7 @@ class TenSecondLifeGame:
     """Main game class"""
     def __init__(self):
         self.screen = pygame.display.set_mode((WINDOW_WIDTH, WINDOW_HEIGHT))
-        pygame.display.set_caption("10 Second Life: Echoes of a Short World v2.0")
+        pygame.display.set_caption("10 Second Life: Echoes of a Short World")
         self.clock = pygame.time.Clock()
         self.running = True
         
@@ -1344,7 +1344,7 @@ class TenSecondLifeGame:
         title_rect = title.get_rect(center=(WINDOW_WIDTH//2, panel_y + 60))
         self.screen.blit(title, title_rect)
         
-        subtitle = self.font_medium.render("Echoes of a Short World v2.0", True, (200, 200, 255))
+        subtitle = self.font_medium.render("Echoes of a Short World", True, (200, 200, 255))
         subtitle_rect = subtitle.get_rect(center=(WINDOW_WIDTH//2, panel_y + 100))
         self.screen.blit(subtitle, subtitle_rect)
         
