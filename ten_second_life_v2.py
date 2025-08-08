@@ -620,8 +620,9 @@ class TenSecondLifeGame:
         self.lesson_text = ""
         self.next_level_ready = False
         
-        # Challenge system - track failures per level
-        self.level_failures = {}  # Track failures for each level
+        # Global 3-lives system
+        self.total_lives = 3  # Total lives for entire game
+        self.lives_remaining = 3  # Current lives remaining
         self.show_motivation = False
         self.motivation_quote = ""
         
@@ -668,25 +669,16 @@ class TenSecondLifeGame:
             self.next_level_ready = False
     
     def handle_level_failure(self):
-        """Handle level failure with challenging restart system"""
-        import random
+        """Handle when player fails a level (time runs out)"""
+        self.lives_remaining -= 1
         
-        # Track failures for current level
-        if self.current_level_num not in self.level_failures:
-            self.level_failures[self.current_level_num] = 0
-        
-        self.level_failures[self.current_level_num] += 1
-        
-        if self.level_failures[self.current_level_num] == 1:
-            # First failure - give second chance with motivation
-            self.show_motivation = True
+        if self.lives_remaining > 0:
+            # Still have lives left - show motivational quote and continue
             self.motivation_quote = random.choice(self.motivation_quotes)
+            self.show_motivation = True
             self.state = GameState.DEATH
-        elif self.level_failures[self.current_level_num] >= 2:
-            # Second failure - game over
-            self.state = GameState.GAME_OVER
         else:
-            # Shouldn't reach here, but fallback to game over
+            # No lives left - game over
             self.state = GameState.GAME_OVER
     
     def restart_level_completely(self):
@@ -726,8 +718,8 @@ class TenSecondLifeGame:
         self.message = ""
         self.message_timer = 0
         
-        # Reset challenge system
-        self.level_failures = {}  # Clear all failure tracking
+        # Reset global lives system
+        self.lives_remaining = 3  # Reset to full 3 lives
         self.show_motivation = False
         self.motivation_quote = ""
         
@@ -979,10 +971,10 @@ class TenSecondLifeGame:
                         hint_surface = self.font_small.render(hint_text, True, (100, 255, 100))
                         self.screen.blit(hint_surface, (20, 100))
         
-        # Lives counter
-        lives_text = f"Lives: {self.lives_lived}"
-        lives_surface = self.font_small.render(lives_text, True, (255, 255, 255))
-        self.screen.blit(lives_surface, (20, WINDOW_HEIGHT - 30))
+        # Lives remaining counter
+        lives_text = f"Lives: {self.lives_remaining}/{self.total_lives}"
+        lives_surface = self.font_small.render(lives_text, True, (200, 255, 200))
+        self.screen.blit(lives_surface, (10, WINDOW_HEIGHT - 30))
         
         # Message display
         if self.message_timer > 0:
@@ -1069,8 +1061,8 @@ class TenSecondLifeGame:
             pygame.draw.rect(self.screen, (100, 255, 100), button_bg, 2, border_radius=8)
             self.screen.blit(continue_surface, continue_rect)
     
-    def draw_wrapped_text(self, text, x, y, max_width, font, color):
-        """Draw text with word wrapping"""
+    def draw_wrapped_text(self, text, x, y, max_width, font, color, center=False):
+        """Draw text with word wrapping, optionally centered"""
         words = text.split(' ')
         lines = []
         current_line = []
@@ -1095,7 +1087,12 @@ class TenSecondLifeGame:
         line_height = font.get_height() + 5
         for i, line in enumerate(lines):
             line_surface = font.render(line, True, color)
-            self.screen.blit(line_surface, (x, y + i * line_height))
+            if center:
+                # Center each line within the max_width
+                line_x = x + (max_width - line_surface.get_width()) // 2
+            else:
+                line_x = x
+            self.screen.blit(line_surface, (line_x, y + i * line_height))
     
     def draw_game(self):
         """Draw the main game scene"""
@@ -1124,16 +1121,27 @@ class TenSecondLifeGame:
         pygame.draw.rect(self.screen, (40, 20, 20), panel_rect, border_radius=15)
         pygame.draw.rect(self.screen, (255, 100, 100), panel_rect, 3, border_radius=15)
         
-        current_failures = self.level_failures.get(self.current_level_num, 0)
-        
-        if current_failures == 1 and self.show_motivation:
-            # First failure - show motivation
-            title_text = "Second Chance!"
-            title_color = (255, 200, 100)
+        if self.lives_remaining > 0 and self.show_motivation:
+            # Still have lives left - show motivation
+            if self.lives_remaining == 2:
+                title_text = "Second Chance!"
+                title_color = (255, 200, 100)
+            elif self.lives_remaining == 1:
+                title_text = "Final Chance!"
+                title_color = (255, 150, 50)
+            else:
+                title_text = "Try Again!"
+                title_color = (255, 200, 100)
             
-            # Motivational quote
+            # Motivational quote - CENTERED
             self.draw_wrapped_text(self.motivation_quote, panel_x + 30, panel_y + 80, 
-                                 panel_width - 60, self.font_small, (255, 255, 200))
+                                 panel_width - 60, self.font_small, (255, 255, 200), center=True)
+            
+            # Lives remaining display
+            lives_text = f"Lives Remaining: {self.lives_remaining}"
+            lives_surface = self.font_medium.render(lives_text, True, (255, 255, 100))
+            lives_rect = lives_surface.get_rect(center=(WINDOW_WIDTH//2, panel_y + panel_height - 120))
+            self.screen.blit(lives_surface, lives_rect)
             
             # Restart instruction
             restart_text = "Press SPACE to try again with a fresh start"
@@ -1147,9 +1155,15 @@ class TenSecondLifeGame:
             pygame.draw.rect(self.screen, (100, 255, 100), button_bg, 3, border_radius=12)
             self.screen.blit(restart_surface, restart_rect)
             
-            # Warning text
-            warning_text = "⚠️  This is your final chance for this level!"
-            warning_surface = self.font_small.render(warning_text, True, (255, 200, 100))
+            # Warning text based on lives remaining
+            if self.lives_remaining == 1:
+                warning_text = "⚠️  This is your FINAL life!"
+                warning_color = (255, 100, 100)
+            else:
+                warning_text = f"⚠️  {self.lives_remaining} lives remaining!"
+                warning_color = (255, 200, 100)
+            
+            warning_surface = self.font_small.render(warning_text, True, warning_color)
             warning_rect = warning_surface.get_rect(center=(WINDOW_WIDTH//2, panel_y + panel_height - 40))
             self.screen.blit(warning_surface, warning_rect)
             
@@ -1199,7 +1213,7 @@ class TenSecondLifeGame:
         self.screen.blit(title_surface, title_rect)
         
         # Failure message
-        failure_text = f"You failed Level {self.current_level_num} twice."
+        failure_text = f"You ran out of lives on Level {self.current_level_num}."
         failure_surface = self.font_medium.render(failure_text, True, (255, 200, 200))
         failure_rect = failure_surface.get_rect(center=(WINDOW_WIDTH//2, panel_y + 120))
         self.screen.blit(failure_surface, failure_rect)
